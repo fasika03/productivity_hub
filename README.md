@@ -50,6 +50,24 @@ Xcode or submit to the App Store):
 flutter build ipa --release
 ```
 
+## App icon
+
+A custom icon is already included at `assets/icon/icon.png` (plus separate
+`icon_foreground.png` / `icon_background.png` layers for Android's adaptive
+icon system), and `flutter_launcher_icons` is pre-configured in `pubspec.yaml`.
+
+To generate all the platform-specific icon files (every iOS size, every
+Android density, the adaptive icon, and the web favicon) in one step:
+
+```
+flutter pub get
+dart run flutter_launcher_icons
+```
+
+Then just `flutter run` or `flutter build apk` as usual — the new icon is
+picked up automatically. Re-run that command any time you replace the source
+PNGs in `assets/icon/`.
+
 ## Project structure
 
 ```
