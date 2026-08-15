@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../theme.dart';
 import '../storage.dart';
+import '../notifications.dart';
 
 class TimerScreen extends StatefulWidget {
   const TimerScreen({super.key});
@@ -47,7 +48,8 @@ class _TimerScreenState extends State<TimerScreen> {
 
   Future<void> _saveStats() async {
     final today = DateTime.now().toString().substring(0, 10);
-    await Storage.save('timer-stats', {'completedToday': _completedToday, 'date': today});
+    await Storage.save(
+        'timer-stats', {'completedToday': _completedToday, 'date': today});
   }
 
   void _selectMode(_Mode m) {
@@ -62,9 +64,20 @@ class _TimerScreenState extends State<TimerScreen> {
   void _toggleRunning() {
     if (_running) {
       _timer?.cancel();
+      NotificationService().cancel(NotificationService.timerNotificationId);
       setState(() => _running = false);
     } else {
       setState(() => _running = true);
+      NotificationService().scheduleAt(
+        id: NotificationService.timerNotificationId,
+        title: _mode == 'focus' ? 'Focus session complete' : 'Break\'s over',
+        body: _mode == 'focus'
+            ? 'Nice work — time for a break.'
+            : 'Ready to focus again?',
+        dateTime: DateTime.now().add(Duration(seconds: _remaining)),
+        channelId: 'productivity_hub_timer',
+        channelName: 'Pomodoro Timer',
+      );
       _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
         setState(() {
           if (_remaining <= 1) {
@@ -85,6 +98,7 @@ class _TimerScreenState extends State<TimerScreen> {
 
   void _reset() {
     _timer?.cancel();
+    NotificationService().cancel(NotificationService.timerNotificationId);
     setState(() {
       _running = false;
       _remaining = _totalSeconds;
@@ -101,7 +115,8 @@ class _TimerScreenState extends State<TimerScreen> {
   Widget build(BuildContext context) {
     final mm = (_remaining ~/ 60).toString().padLeft(2, '0');
     final ss = (_remaining % 60).toString().padLeft(2, '0');
-    final progress = _totalSeconds == 0 ? 0.0 : 1 - (_remaining / _totalSeconds);
+    final progress =
+        _totalSeconds == 0 ? 0.0 : 1 - (_remaining / _totalSeconds);
 
     return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
@@ -148,7 +163,8 @@ class _TimerScreenState extends State<TimerScreen> {
                 Container(
                   width: 200,
                   height: 200,
-                  decoration: const BoxDecoration(shape: BoxShape.circle, color: Colors.white),
+                  decoration: const BoxDecoration(
+                      shape: BoxShape.circle, color: Colors.white),
                   alignment: Alignment.center,
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
@@ -164,7 +180,10 @@ class _TimerScreenState extends State<TimerScreen> {
                       const SizedBox(height: 6),
                       Text(
                         _mode == 'focus' ? 'FOCUS SESSION' : 'BREAK TIME',
-                        style: const TextStyle(fontSize: 11.5, letterSpacing: 1.4, color: AppColors.textMuted),
+                        style: const TextStyle(
+                            fontSize: 11.5,
+                            letterSpacing: 1.4,
+                            color: AppColors.textMuted),
                       ),
                     ],
                   ),
@@ -181,10 +200,13 @@ class _TimerScreenState extends State<TimerScreen> {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.inkDark,
                   foregroundColor: AppColors.textLight,
-                  padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 13),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 32, vertical: 13),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(6)),
                 ),
-                child: Text(_running ? 'Pause' : 'Start', style: const TextStyle(fontWeight: FontWeight.w700)),
+                child: Text(_running ? 'Pause' : 'Start',
+                    style: const TextStyle(fontWeight: FontWeight.w700)),
               ),
               const SizedBox(width: 12),
               OutlinedButton(
@@ -193,10 +215,13 @@ class _TimerScreenState extends State<TimerScreen> {
                   foregroundColor: AppColors.textMuted,
                   backgroundColor: Colors.white,
                   side: const BorderSide(color: AppColors.parchmentLine),
-                  padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 13),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 22, vertical: 13),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(6)),
                 ),
-                child: const Text('Reset', style: TextStyle(fontWeight: FontWeight.w600)),
+                child: const Text('Reset',
+                    style: TextStyle(fontWeight: FontWeight.w600)),
               ),
             ],
           ),
@@ -208,7 +233,8 @@ class _TimerScreenState extends State<TimerScreen> {
                 const TextSpan(text: 'Focus sessions completed today: '),
                 TextSpan(
                   text: '$_completedToday',
-                  style: const TextStyle(fontWeight: FontWeight.w700, color: AppColors.textDark),
+                  style: const TextStyle(
+                      fontWeight: FontWeight.w700, color: AppColors.textDark),
                 ),
               ],
             ),
@@ -217,7 +243,10 @@ class _TimerScreenState extends State<TimerScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: List.generate(8, (i) {
-              final filledCount = _completedToday % 8 == 0 && _completedToday > 0 ? 8 : _completedToday % 8;
+              final filledCount =
+                  _completedToday % 8 == 0 && _completedToday > 0
+                      ? 8
+                      : _completedToday % 8;
               final filled = i < filledCount;
               return Container(
                 width: 8,
@@ -225,7 +254,8 @@ class _TimerScreenState extends State<TimerScreen> {
                 margin: const EdgeInsets.symmetric(horizontal: 3),
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: filled ? AppColors.terracotta : AppColors.parchmentLine,
+                  color:
+                      filled ? AppColors.terracotta : AppColors.parchmentLine,
                 ),
               );
             }),

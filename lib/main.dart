@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'theme.dart';
+import 'notifications.dart';
 import 'screens/todo_screen.dart';
 import 'screens/planner_screen.dart';
 import 'screens/timer_screen.dart';
@@ -7,7 +8,9 @@ import 'screens/notes_screen.dart';
 import 'screens/gpa_screen.dart';
 import 'screens/quotes_screen.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await NotificationService().init();
   runApp(const ProductivityHubApp());
 }
 

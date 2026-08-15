@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../theme.dart';
 import '../storage.dart';
+import '../notifications.dart';
 
 class TodoScreen extends StatefulWidget {
   const TodoScreen({super.key});
@@ -14,6 +15,7 @@ class _TodoScreenState extends State<TodoScreen> {
   final _controller = TextEditingController();
   String _priority = 'medium';
   String _filter = 'all';
+  DateTime? _reminderAt;
 
   static const _priorities = ['low', 'medium', 'high'];
   static const _priorityColors = {
@@ -37,34 +39,96 @@ class _TodoScreenState extends State<TodoScreen> {
     await Storage.save('todos', _todos);
   }
 
+  Future<void> _pickReminder() async {
+    final now = DateTime.now();
+    final date = await showDatePicker(
+      context: context,
+      initialDate: _reminderAt ?? now,
+      firstDate: now.subtract(const Duration(days: 1)),
+      lastDate: now.add(const Duration(days: 730)),
+    );
+    if (date == null || !mounted) return;
+    final time = await showTimePicker(
+      context: context,
+      initialTime: _reminderAt != null
+          ? TimeOfDay.fromDateTime(_reminderAt!)
+          : const TimeOfDay(hour: 9, minute: 0),
+    );
+    if (time == null) return;
+    setState(() {
+      _reminderAt =
+          DateTime(date.year, date.month, date.day, time.hour, time.minute);
+    });
+  }
+
   void _addTodo() {
     final text = _controller.text.trim();
     if (text.isEmpty) return;
+    final id = generateId();
+    final reminderAt = _reminderAt;
     setState(() {
       _todos.add({
-        'id': generateId(),
+        'id': id,
         'text': text,
         'done': false,
         'priority': _priority,
         'createdAt': DateTime.now().millisecondsSinceEpoch,
+        'reminderAt': reminderAt?.millisecondsSinceEpoch,
       });
       _controller.clear();
       _priority = 'medium';
+      _reminderAt = null;
     });
     _persist();
+    if (reminderAt != null) {
+      NotificationService().scheduleAt(
+        id: notificationIdFor(id),
+        title: 'Task reminder',
+        body: text,
+        dateTime: reminderAt,
+      );
+    }
   }
 
   void _toggle(String id) {
+    late bool nowDone;
     setState(() {
       final t = _todos.firstWhere((e) => e['id'] == id);
       t['done'] = !(t['done'] as bool);
+      nowDone = t['done'] as bool;
     });
     _persist();
+    if (nowDone) {
+      NotificationService().cancel(notificationIdFor(id));
+    }
   }
 
   void _delete(String id) {
     setState(() => _todos.removeWhere((e) => e['id'] == id));
     _persist();
+    NotificationService().cancel(notificationIdFor(id));
+  }
+
+  String _formatReminder(int millis) {
+    final dt = DateTime.fromMillisecondsSinceEpoch(millis);
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec'
+    ];
+    final hour12 = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
+    final ampm = dt.hour >= 12 ? 'PM' : 'AM';
+    final minute = dt.minute.toString().padLeft(2, '0');
+    return '${months[dt.month - 1]} ${dt.day}, $hour12:$minute $ampm';
   }
 
   @override
@@ -75,7 +139,8 @@ class _TodoScreenState extends State<TodoScreen> {
       return true;
     }).toList()
       ..sort((a, b) {
-        final doneCompare = (a['done'] as bool ? 1 : 0).compareTo(b['done'] as bool ? 1 : 0);
+        final doneCompare =
+            (a['done'] as bool ? 1 : 0).compareTo(b['done'] as bool ? 1 : 0);
         if (doneCompare != 0) return doneCompare;
         return (a['createdAt'] as int).compareTo(b['createdAt'] as int);
       });
@@ -120,9 +185,67 @@ class _TodoScreenState extends State<TodoScreen> {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.inkDark,
                   foregroundColor: AppColors.textLight,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(6)),
                 ),
               ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              GestureDetector(
+                onTap: _pickReminder,
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: _reminderAt != null
+                        ? AppColors.goldSoft.withOpacity(0.25)
+                        : Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: _reminderAt != null
+                          ? AppColors.gold
+                          : AppColors.parchmentLine,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.notifications_outlined,
+                        size: 15,
+                        color: _reminderAt != null
+                            ? AppColors.gold
+                            : AppColors.textMuted,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        _reminderAt != null
+                            ? _formatReminder(
+                                _reminderAt!.millisecondsSinceEpoch)
+                            : 'Set reminder',
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w600,
+                          color: _reminderAt != null
+                              ? AppColors.textDark
+                              : AppColors.textMuted,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              if (_reminderAt != null)
+                IconButton(
+                  icon: const Icon(Icons.close,
+                      size: 16, color: AppColors.textMuted),
+                  onPressed: () => setState(() => _reminderAt = null),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                ),
             ],
           ),
           const SizedBox(height: 14),
@@ -154,7 +277,9 @@ class _TodoScreenState extends State<TodoScreen> {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text('✎', style: displayFont(size: 32, color: AppColors.gold)),
+                        Text('✎',
+                            style:
+                                displayFont(size: 32, color: AppColors.gold)),
                         const SizedBox(height: 8),
                         const Text(
                           'Nothing here yet. Add your first task above.',
@@ -171,6 +296,7 @@ class _TodoScreenState extends State<TodoScreen> {
                       final t = filtered[i];
                       final done = t['done'] as bool;
                       final priority = t['priority'] as String;
+                      final reminderAt = t['reminderAt'] as int?;
                       return Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
@@ -190,10 +316,12 @@ class _TodoScreenState extends State<TodoScreen> {
                                 decoration: BoxDecoration(
                                   shape: BoxShape.circle,
                                   color: done ? AppColors.sage : Colors.white,
-                                  border: Border.all(color: AppColors.sage, width: 1.6),
+                                  border: Border.all(
+                                      color: AppColors.sage, width: 1.6),
                                 ),
                                 child: done
-                                    ? const Icon(Icons.check, size: 13, color: Colors.white)
+                                    ? const Icon(Icons.check,
+                                        size: 13, color: Colors.white)
                                     : null,
                               ),
                             ),
@@ -206,24 +334,54 @@ class _TodoScreenState extends State<TodoScreen> {
                                     t['text'] as String,
                                     style: TextStyle(
                                       fontSize: 14.5,
-                                      color: done ? AppColors.textMuted : AppColors.textDark,
-                                      decoration: done ? TextDecoration.lineThrough : null,
+                                      color: done
+                                          ? AppColors.textMuted
+                                          : AppColors.textDark,
+                                      decoration: done
+                                          ? TextDecoration.lineThrough
+                                          : null,
                                     ),
                                   ),
                                   const SizedBox(height: 4),
-                                  Text(
-                                    priority,
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w700,
-                                      color: _priorityColors[priority],
-                                    ),
+                                  Wrap(
+                                    spacing: 8,
+                                    runSpacing: 4,
+                                    crossAxisAlignment:
+                                        WrapCrossAlignment.center,
+                                    children: [
+                                      Text(
+                                        priority,
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w700,
+                                          color: _priorityColors[priority],
+                                        ),
+                                      ),
+                                      if (reminderAt != null)
+                                        Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            const Icon(
+                                                Icons.notifications_outlined,
+                                                size: 12,
+                                                color: AppColors.textMuted),
+                                            const SizedBox(width: 3),
+                                            Text(
+                                              _formatReminder(reminderAt),
+                                              style: const TextStyle(
+                                                  fontSize: 11,
+                                                  color: AppColors.textMuted),
+                                            ),
+                                          ],
+                                        ),
+                                    ],
                                   ),
                                 ],
                               ),
                             ),
                             IconButton(
-                              icon: const Icon(Icons.close, size: 18, color: AppColors.textMuted),
+                              icon: const Icon(Icons.close,
+                                  size: 18, color: AppColors.textMuted),
                               onPressed: () => _delete(t['id'] as String),
                               padding: EdgeInsets.zero,
                               constraints: const BoxConstraints(),
