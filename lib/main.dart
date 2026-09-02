@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import 'theme.dart';
 import 'notifications.dart';
+import 'screen_time.dart';
 import 'screens/todo_screen.dart';
 import 'screens/planner_screen.dart';
 import 'screens/timer_screen.dart';
 import 'screens/notes_screen.dart';
 import 'screens/gpa_screen.dart';
 import 'screens/quotes_screen.dart';
+import 'screens/screen_time_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -35,7 +37,7 @@ class RootNav extends StatefulWidget {
   State<RootNav> createState() => _RootNavState();
 }
 
-class _RootNavState extends State<RootNav> {
+class _RootNavState extends State<RootNav> with WidgetsBindingObserver {
   int _index = 0;
 
   static const _titles = [
@@ -47,6 +49,9 @@ class _RootNavState extends State<RootNav> {
     'Quotes',
   ];
 
+  // Matches the bottom-nav labels; used as the screen-time breakdown keys.
+  static const _screenNames = ['Tasks', 'Planner', 'Timer', 'Notes', 'GPA', 'Quotes'];
+
   static const _screens = [
     TodoScreen(),
     PlannerScreen(),
@@ -57,13 +62,63 @@ class _RootNavState extends State<RootNav> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    ScreenTimeTracker().enterScreen(_screenNames[_index]);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    ScreenTimeTracker().pause();
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.detached) {
+      ScreenTimeTracker().pause();
+    } else if (state == AppLifecycleState.resumed) {
+      ScreenTimeTracker().enterScreen(_screenNames[_index]);
+    }
+  }
+
+  void _selectTab(int i) {
+    setState(() => _index = i);
+    ScreenTimeTracker().enterScreen(_screenNames[i]);
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(_titles[_index])),
+      appBar: AppBar(
+        title: Text(_titles[_index]),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.hourglass_bottom_outlined),
+            tooltip: 'Screen time',
+            onPressed: () async {
+              await ScreenTimeTracker().enterScreen('Screen Time');
+              if (!context.mounted) return;
+              await Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => Scaffold(
+                    appBar: AppBar(title: const Text('Screen Time')),
+                    backgroundColor: AppColors.parchment,
+                    body: const ScreenTimeScreen(),
+                  ),
+                ),
+              );
+              ScreenTimeTracker().enterScreen(_screenNames[_index]);
+            },
+          ),
+        ],
+      ),
       body: IndexedStack(index: _index, children: _screens),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _index,
-        onTap: (i) => setState(() => _index = i),
+        onTap: _selectTab,
         type: BottomNavigationBarType.fixed,
         backgroundColor: AppColors.inkDarker,
         selectedItemColor: AppColors.gold,

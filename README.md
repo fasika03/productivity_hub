@@ -131,7 +131,9 @@ lines inside the `<manifest>` tag, above `<application>`:
 ```
 Also make sure `minSdkVersion` in `android/app/build.gradle` is at least 21
 (`flutter_launcher_icons` already assumes 21; recent Flutter templates default
-to this already, so most projects need no change here).
+to this already, so most projects need no change here). Note: the screen-time
+feature below needs `minSdkVersion` 23+, so if you're using both features,
+use 23.
 
 **iOS** — open `ios/Runner/AppDelegate.swift` and register the notification
 delegate inside `application(_:didFinishLaunchingWithOptions:)`, before the
@@ -145,20 +147,72 @@ if #available(iOS 10.0, *) {
 The app requests notification permission itself on first launch — no
 Info.plist changes are required beyond the above.
 
+## Screen time tracker
+
+Tap the hourglass icon in the top-right of any screen to see:
+- Total time spent in Productivity Hub today, and a breakdown by tool
+  (Tasks, Planner, Timer, Notes, GPA, Quotes)
+- A simple 7-day bar chart of daily usage
+- **All apps on this device today** — on Android, a full breakdown of how
+  long you've spent in every app on your phone today, with icons and names,
+  sorted longest first
+
+The in-app breakdown works everywhere with no setup — it's tracked via app
+lifecycle + tab-switch events and stored locally. The **all-apps** section is
+Android-only: iOS doesn't allow regular apps to read other apps' usage data
+(that's restricted to Apple's own Screen Time system), so on iOS you'll see a
+short explanation there instead of a blank list.
+
+**Android setup** — this uses the `usage_stats` package, which needs the
+special `PACKAGE_USAGE_STATS` permission. Unlike a normal runtime permission,
+the user grants this manually in system Settings — there's a "Grant access"
+button built into the screen that opens the right settings page. You do need
+to add the permission to the manifest once, after running `flutter create .`:
+open `android/app/src/main/AndroidManifest.xml` and add this inside the
+`<manifest>` tag, above `<application>` (alongside the notification
+permissions from the section above):
+```xml
+<uses-permission
+    android:name="android.permission.PACKAGE_USAGE_STATS"
+    tools:ignore="ProtectedPermissions"/>
+```
+
+App names and icons for the all-apps list come from the `device_apps`
+package. On Android 11+, an app can only see details for other apps it
+"knows about" unless it declares broader visibility. If you notice most apps
+show up by package name only (e.g. `com.example.app`) instead of a friendly
+name/icon, add this near the bottom of the same `AndroidManifest.xml`, as a
+sibling of `<application>` (not inside it):
+```xml
+<queries>
+  <intent>
+    <action android:name="android.intent.action.MAIN"/>
+  </intent>
+</queries>
+```
+This is enough for personal use and side-loaded installs. If you ever publish
+to the Play Store, broad package visibility can draw extra review scrutiny —
+Google's docs on the `<queries>` element cover what's allowed.
+
+Nothing here is ever sent off the device — both the in-app and all-apps data
+stay local.
+
 ## Project structure
 
 ```
-lib/main.dart                      App entry point, bottom navigation, notification init
+lib/main.dart                      App entry point, navigation, notification + screen-time init
 lib/theme.dart                     Colors, fonts, shared ThemeData
 lib/storage.dart                   SharedPreferences persistence helper
 lib/notifications.dart             Local notification scheduling service
+lib/screen_time.dart               Screen time tracking service
 lib/data/quotes.dart               Motivational quotes data
-lib/screens/todo_screen.dart       To-Do list (with due-date reminders)
-lib/screens/planner_screen.dart    Weekly study planner (with weekly reminders)
-lib/screens/timer_screen.dart      Pomodoro timer (with session-end alerts)
-lib/screens/notes_screen.dart      Notes (list + full-screen editor)
-lib/screens/gpa_screen.dart        GPA calculator
-lib/screens/quotes_screen.dart     Motivational quotes
+lib/screens/todo_screen.dart         To-Do list (with due-date reminders)
+lib/screens/planner_screen.dart      Weekly study planner (with weekly reminders)
+lib/screens/timer_screen.dart        Pomodoro timer (with session-end alerts)
+lib/screens/notes_screen.dart        Notes (list + full-screen editor)
+lib/screens/gpa_screen.dart          GPA calculator
+lib/screens/quotes_screen.dart       Motivational quotes
+lib/screens/screen_time_screen.dart  Screen time breakdown view
 ```
 
 ## Notes
