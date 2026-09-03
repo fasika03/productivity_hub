@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'theme.dart';
 import 'notifications.dart';
 import 'screen_time.dart';
+import 'auth_gate.dart';
 import 'screens/todo_screen.dart';
 import 'screens/planner_screen.dart';
 import 'screens/timer_screen.dart';
@@ -9,6 +10,7 @@ import 'screens/notes_screen.dart';
 import 'screens/gpa_screen.dart';
 import 'screens/quotes_screen.dart';
 import 'screens/screen_time_screen.dart';
+import 'screens/security_settings_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -25,7 +27,7 @@ class ProductivityHubApp extends StatelessWidget {
       title: 'Productivity Hub',
       debugShowCheckedModeBanner: false,
       theme: buildAppTheme(),
-      home: const RootNav(),
+      home: const AuthGate(child: RootNav()),
     );
   }
 }
@@ -95,6 +97,18 @@ class _RootNavState extends State<RootNav> with WidgetsBindingObserver {
       appBar: AppBar(
         title: Text(_titles[_index]),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.lock_outline),
+            tooltip: 'App Lock',
+            onPressed: () async {
+              await ScreenTimeTracker().enterScreen('Security Settings');
+              if (!context.mounted) return;
+              await Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const SecuritySettingsScreen()),
+              );
+              ScreenTimeTracker().enterScreen(_screenNames[_index]);
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.hourglass_bottom_outlined),
             tooltip: 'Screen time',

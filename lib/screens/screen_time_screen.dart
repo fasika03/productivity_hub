@@ -1,6 +1,19 @@
+import 'dart:io' show Platform;
+import 'dart:typed_data';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:usage_stats/usage_stats.dart';
+import 'package:device_apps/device_apps.dart';
 import '../theme.dart';
 import '../screen_time.dart';
+
+class _AppUsage {
+  final String packageName;
+  final String label;
+  final int seconds;
+  final Uint8List? icon;
+  _AppUsage({required this.packageName, required this.label, required this.seconds, this.icon});
+}
 
 class ScreenTimeScreen extends StatefulWidget {
   const ScreenTimeScreen({super.key});
@@ -13,6 +26,13 @@ class _ScreenTimeScreenState extends State<ScreenTimeScreen> {
   Map<String, dynamic>? _todayEntry;
   List<MapEntry<String, Map<String, dynamic>>> _week = [];
   bool _loading = true;
+
+  bool get _isAndroid => !kIsWeb && Platform.isAndroid;
+  bool _checkedDevicePermission = false;
+  bool _devicePermissionGranted = false;
+  bool _loadingDeviceUsage = false;
+  List<_AppUsage> _deviceApps = [];
+  final Map<String, Application?> _appInfoCache = {};
 
   static const _toolOrder = ['Tasks', 'Planner', 'Timer', 'Notes', 'GPA', 'Quotes'];
   static const _toolColors = {
@@ -28,6 +48,7 @@ class _ScreenTimeScreenState extends State<ScreenTimeScreen> {
   void initState() {
     super.initState();
     _load();
+    if (_isAndroid) _checkDevicePermissionAndLoad();
   }
 
   Future<void> _load() async {
@@ -39,6 +60,84 @@ class _ScreenTimeScreenState extends State<ScreenTimeScreen> {
       _week = week;
       _loading = false;
     });
+  }
+
+  Future<void> _refreshAll() async {
+    await _load();
+    if (_isAndroid && _devicePermissionGranted) await _loadDeviceUsage();
+  }
+
+  Future<void> _checkDevicePermissionAndLoad() async {
+    bool granted = false;
+    try {
+      granted = await UsageStats.checkUsagePermission() ?? false;
+    } catch (_) {
+      granted = false;
+    }
+    if (!mounted) return;
+    setState(() {
+      _devicePermissionGranted = granted;
+      _checkedDevicePermission = true;
+    });
+    if (granted) await _loadDeviceUsage();
+  }
+
+  Future<void> _requestDevicePermission() async {
+    try {
+      await UsageStats.grantUsagePermission();
+    } catch (_) {
+      // ignore — user may cancel out of Settings
+    }
+    // The user is taken to system Settings and returns manually; re-check
+    // once they're back rather than assuming success immediately.
+    if (mounted) await _checkDevicePermissionAndLoad();
+  }
+
+  Future<void> _loadDeviceUsage() async {
+    setState(() => _loadingDeviceUsage = true);
+    try {
+      final end = DateTime.now();
+      final start = DateTime(end.year, end.month, end.day);
+      final stats = await UsageStats.queryUsageStats(start, end);
+
+      final Map<String, int> totals = {};
+      for (final info in stats) {
+        final pkg = info.packageName;
+        if (pkg == null || pkg.isEmpty) continue;
+        final raw = double.tryParse(info.totalTimeInForeground ?? '0') ?? 0;
+        final secs = (raw / 1000).round();
+        if (secs <= 0) continue;
+        totals[pkg] = (totals[pkg] ?? 0) + secs;
+      }
+
+      final entries = totals.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
+      final top = entries.take(30);
+
+      final List<_AppUsage> result = [];
+      for (final e in top) {
+        String label = e.key;
+        Uint8List? icon;
+        try {
+          if (!_appInfoCache.containsKey(e.key)) {
+            _appInfoCache[e.key] = await DeviceApps.getApp(e.key, true);
+          }
+          final app = _appInfoCache[e.key];
+          if (app != null) {
+            label = app.appName;
+            if (app is ApplicationWithIcon) icon = app.icon;
+          }
+        } catch (_) {
+          // fall back to the raw package name if lookup fails
+        }
+        result.add(_AppUsage(packageName: e.key, label: label, seconds: e.value, icon: icon));
+      }
+
+      if (mounted) setState(() => _deviceApps = result);
+    } catch (_) {
+      // leave the list as-is; the UI shows an empty state
+    } finally {
+      if (mounted) setState(() => _loadingDeviceUsage = false);
+    }
   }
 
   String _weekdayLabel(String dateKey) {
@@ -67,8 +166,11 @@ class _ScreenTimeScreenState extends State<ScreenTimeScreen> {
         .toList()
       ..sort((a, b) => b.value.compareTo(a.value));
 
+    final deviceTotal = _deviceApps.fold<int>(0, (sum, a) => sum + a.seconds);
+    final deviceMax = _deviceApps.isEmpty ? 1 : _deviceApps.first.seconds;
+
     return RefreshIndicator(
-      onRefresh: _load,
+      onRefresh: _refreshAll,
       color: AppColors.gold,
       child: ListView(
         padding: const EdgeInsets.all(20),
@@ -174,14 +276,157 @@ class _ScreenTimeScreenState extends State<ScreenTimeScreen> {
               }).toList(),
             ),
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 8),
           const Text(
             'Time is tracked locally on this device only — nothing is sent anywhere.',
             style: TextStyle(fontSize: 11.5, color: AppColors.textMuted, fontStyle: FontStyle.italic),
             textAlign: TextAlign.center,
           ),
+          const SizedBox(height: 28),
+          Text('All apps on this device today', style: displayFont(size: 16)),
+          const SizedBox(height: 12),
+          if (!_isAndroid)
+            _buildNotice(
+              "iOS doesn't let regular apps read how long you've spent in "
+              "other apps — that data is restricted to Apple's own Screen "
+              "Time system. Everything above still tracks Productivity Hub "
+              "itself accurately on any device.",
+            )
+          else if (!_checkedDevicePermission)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 20),
+              child: Center(child: CircularProgressIndicator(color: AppColors.gold)),
+            )
+          else if (!_devicePermissionGranted)
+            _buildPermissionCard()
+          else
+            _buildDeviceAppsList(deviceTotal, deviceMax),
         ],
       ),
+    );
+  }
+
+  Widget _buildNotice(String text) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: AppColors.parchmentLine),
+      ),
+      child: Text(text, style: const TextStyle(fontSize: 13, color: AppColors.textMuted, height: 1.5)),
+    );
+  }
+
+  Widget _buildPermissionCard() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: AppColors.parchmentLine),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            "To show today's usage across all your apps, Android needs "
+            "one-time permission via Settings → Usage Access.",
+            style: TextStyle(fontSize: 13, color: AppColors.textMuted, height: 1.5),
+          ),
+          const SizedBox(height: 14),
+          ElevatedButton(
+            onPressed: _requestDevicePermission,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.inkDark,
+              foregroundColor: AppColors.textLight,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+            ),
+            child: const Text('Grant access', style: TextStyle(fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDeviceAppsList(int totalSeconds, int maxSeconds) {
+    if (_loadingDeviceUsage && _deviceApps.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 20),
+        child: Center(child: CircularProgressIndicator(color: AppColors.gold)),
+      );
+    }
+    if (_deviceApps.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 10),
+        child: Text(
+          'No usage recorded yet today. Pull down to refresh.',
+          style: TextStyle(fontSize: 13, color: AppColors.textMuted),
+        ),
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Total: ${formatDuration(totalSeconds)}',
+          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.textDark),
+        ),
+        const SizedBox(height: 10),
+        ..._deviceApps.map((a) => Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: AppColors.parchmentLine),
+              ),
+              child: Row(
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: a.icon != null
+                        ? Image.memory(a.icon!, width: 36, height: 36, fit: BoxFit.cover)
+                        : Container(
+                            width: 36,
+                            height: 36,
+                            color: AppColors.parchmentSoft,
+                            child: const Icon(Icons.apps, size: 18, color: AppColors.textMuted),
+                          ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          a.label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, color: AppColors.textDark),
+                        ),
+                        const SizedBox(height: 5),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(3),
+                          child: LinearProgressIndicator(
+                            value: maxSeconds == 0 ? 0 : a.seconds / maxSeconds,
+                            minHeight: 5,
+                            backgroundColor: AppColors.parchmentSoft,
+                            valueColor: const AlwaysStoppedAnimation(AppColors.gold),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Text(
+                    formatDuration(a.seconds),
+                    style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: AppColors.textMuted),
+                  ),
+                ],
+              ),
+            )),
+      ],
     );
   }
 }
