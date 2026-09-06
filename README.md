@@ -177,35 +177,208 @@ permissions from the section above):
     tools:ignore="ProtectedPermissions"/>
 ```
 
-App names and icons for the all-apps list come from the `device_apps`
-package. On Android 11+, an app can only see details for other apps it
-"knows about" unless it declares broader visibility. If you notice most apps
-show up by package name only (e.g. `com.example.app`) instead of a friendly
-name/icon, add this near the bottom of the same `AndroidManifest.xml`, as a
-sibling of `<application>` (not inside it):
-```xml
-<queries>
-  <intent>
-    <action android:name="android.intent.action.MAIN"/>
-  </intent>
-</queries>
-```
-This is enough for personal use and side-loaded installs. If you ever publish
-to the Play Store, broad package visibility can draw extra review scrutiny —
-Google's docs on the `<queries>` element cover what's allowed.
+App entries in the all-apps list are shown by a readable guess from their
+package name (e.g. `com.spotify.music` → "Music") rather than each app's
+actual name and icon. An earlier version of this feature used the
+`device_apps` package to fetch real names/icons, but that package is
+unmaintained and its Android build script calls the long-removed `jcenter()`
+repository — it fails outright on current Android Gradle Plugin versions, so
+it's been removed. If you want real app names/icons back, a maintained
+alternative like `installed_apps` could be swapped in the same spot in
+`lib/screens/screen_time_screen.dart` (`_buildDeviceAppsList`).
 
 Nothing here is ever sent off the device — both the in-app and all-apps data
 stay local.
 
+## App Lock (PIN)
+
+Tap the lock icon in the top-right of any screen to open **App Lock**, where
+you can set up a 4-digit PIN. Once one is set:
+- The app shows a lock screen requiring the PIN every time it's cold-started,
+  and again any time it returns from the background (switching apps, locking
+  your phone, etc.) — the same pattern banking apps use.
+- The PIN itself is never stored — only a salted SHA-256 hash of it
+  (`lib/auth.dart`), using the `crypto` package.
+- From the same App Lock screen you can change the PIN (asks for the current
+  one first), remove it entirely, or manually "Lock now."
+
+No native setup is required for this feature — it only uses
+`shared_preferences` and pure Dart hashing, both already in the project.
+
+**Heads up:** there's no "forgot PIN" recovery flow, since the app has no
+account system to verify identity against. If a PIN is forgotten, the only
+way back in is uninstalling and reinstalling the app, which — like any reset
+of this app — clears all locally saved data. The App Lock screen reminds you
+of this before you set one up.
+
+## Get Started screen
+
+The first time the app is ever opened, it shows a one-time welcome screen
+with an app summary and a **Get Started** button, before anything else (the
+PIN lock, if you've set one, comes right after this — not before). Tapping
+the button saves a flag locally so this screen never appears again on that
+device.
+
+Note this is a separate thing from the native splash screen
+(`flutter_native_splash`, described above): the native splash is a static
+OS-level image shown for a split second while Flutter itself is loading, and
+can't contain buttons or any interactive Flutter widgets. "Get Started" is a
+real Flutter screen (`lib/screens/welcome_screen.dart`) that appears right
+after that splash image, on first launch only.
+
+To see it again during testing, clear the app's local storage (uninstall and
+reinstall, or clear the app's storage from your device's app settings) — that
+resets the "have I onboarded" flag along with everything else.
+
+## Translator
+
+The Translate tab lets you translate typed text between 20+ languages,
+including auto-detecting the source language. It uses the free `translator`
+package (an unofficial Google Translate client — no API key needed).
+
+Tap either language button to open a picker, type your text, and tap
+Translate. The result can be copied with the copy icon, and the swap button
+flips languages and results back into the input box.
+
+**This is the one feature in the app that needs an internet connection** —
+everything else works fully offline. On Android, an internet permission is
+required for release builds (debug builds get it automatically): open
+`android/app/src/main/AndroidManifest.xml` and add this inside the
+`<manifest>` tag, above `<application>` (alongside the other permissions in
+this README):
+```xml
+<uses-permission android:name="android.permission.INTERNET"/>
+```
+No changes are needed on iOS — internet access is allowed by default there.
+
+Since it relies on a free, unofficial endpoint rather than an official paid
+API, it can occasionally be slower or briefly unavailable; the screen shows a
+plain error message and lets you retry if a translation fails.
+
+## Quote of the day (notification + home screen widget)
+
+There are two independent ways to see a quote without opening the app:
+
+### 1. Daily notification (fully set up already)
+
+In the **Quotes** tab, flip on "Daily quote reminder" and pick a time. Every
+day at that time, a notification fires with a fresh random quote — tap the
+time to change it. This uses the same `flutter_local_notifications` setup as
+the rest of the app's reminders, so no extra native setup is needed beyond
+what's already in the Reminders & notifications section above.
+
+Technical note: a single repeating notification can't change its own text
+each time it fires on its own, so `lib/daily_quote_reminder.dart` re-picks a
+random quote and reschedules "today's/tomorrow's" notification every time the
+app is opened. In practice this means the quote changes daily as long as you
+open the app at least once a day; if the app goes unopened for several days,
+the same quote may repeat until the next time it's opened.
+
+### 2. Home screen widget (manual native setup required)
+
+A true home-screen widget — sitting outside the app, visible without
+unlocking your phone on the lock screen (Android) or on the home screen
+(both platforms) — can't be built with Dart/Flutter code alone. Both
+platforms require small pieces of platform-native code, which is why this
+part isn't something that gets automatically generated: it lives in the
+`native-widgets/` folder in this project as source files ready to copy into
+place. This widget picks its own random quote natively — no Flutter code
+needs to run for it to refresh.
+
+**Android** (works entirely by copying files — no Xcode/Mac needed):
+1. Run `flutter create .` first if you haven't (see step 2 above).
+2. Copy `native-widgets/android/kotlin/QuoteWidgetProvider.kt` to
+   `android/app/src/main/kotlin/<your/package/path>/QuoteWidgetProvider.kt`
+   — use the same folder that already contains `MainActivity.kt`, and open
+   the copied file to update its `package` line to match exactly.
+3. Copy `native-widgets/android/res/layout/quote_widget.xml` to
+   `android/app/src/main/res/layout/quote_widget.xml`.
+4. Copy `native-widgets/android/res/xml/quote_widget_info.xml` to
+   `android/app/src/main/res/xml/quote_widget_info.xml`.
+5. Open `native-widgets/android/AndroidManifest-widget-snippet.xml` and paste
+   its contents inside the `<application>` tag in
+   `android/app/src/main/AndroidManifest.xml`.
+6. `flutter run` (or rebuild), then on your phone: long-press the home
+   screen → Widgets → Productivity Hub → drag the quote widget onto your
+   home screen.
+
+The widget refreshes itself automatically roughly every 6 hours (Android's
+minimum reliable interval; the system may delay this further under battery
+optimization) and has its own refresh icon to get a new quote on tap
+immediately — both work without ever opening the app.
+
+**iOS** (requires a Mac with Xcode — this part can't be scripted from
+outside Xcode, since a Widget Extension is a distinct build target Xcode
+has to generate):
+1. Open `ios/Runner.xcworkspace` in Xcode (after `flutter create .` and at
+   least one `flutter build ios` or `flutter run`).
+2. File → New → Target… → search "Widget Extension" → Next.
+3. Name it e.g. `QuoteWidgetExtension`, uncheck "Include Live Activity" and
+   "Include Configuration Intent" if prompted, and finish. Xcode generates a
+   new folder with a template Swift file and activates a scheme for it.
+4. Open the generated `QuoteWidgetExtension.swift` (or similarly named) file
+   and replace its entire contents with `native-widgets/ios/QuoteWidget.swift`
+   from this project.
+5. Build and run the main app target on a device or simulator once so the
+   extension gets installed alongside it, then on the device: long-press the
+   home screen → tap the **+** in the corner → search "Productivity Hub" →
+   add the widget.
+
+Both native quote lists are simple hardcoded arrays (Kotlin/Swift) rather
+than reading from the Dart quotes file, since neither platform's widget
+system can run Flutter code to fetch that data — if you add or edit quotes
+in `lib/data/quotes.dart`, update `QuoteWidgetProvider.kt` and
+`QuoteWidget.swift` to match.
+
+## Troubleshooting
+
+**`Could not find method jcenter()` / errors mentioning `device_apps`** — this
+was the old, now-removed all-apps dependency; if you're on a version of this
+project from before this fix, delete the `device_apps` line from
+`pubspec.yaml`, run `flutter clean && flutter pub get`, then `flutter run`
+again. If you already have the current zip, this dependency isn't present at
+all — you shouldn't see this error.
+
+**`Starting AGP 9+, only the new DSL interface will be read` / build fails on
+`android/app/build.gradle.kts`** — this means the Android Gradle Plugin (and
+Gradle itself) installed on your machine is newer than what Flutter's project
+template expects; it's unrelated to anything in this app's own code. Two ways
+to fix it:
+- **Simplest**: run `flutter upgrade` to get the latest stable Flutter, which
+  tracks current AGP/Gradle compatibility — then `flutter clean && flutter pub get`.
+- **If you need to stay on your current Flutter version**: pin an older,
+  compatible Gradle by editing
+  `android/gradle/wrapper/gradle-wrapper.properties` — change the
+  `distributionUrl` line to a Gradle 8.x release (e.g.
+  `gradle-8.7-all.zip`), and check `android/settings.gradle.kts` for an
+  Android Gradle Plugin version line (`id("com.android.application") version
+  "..."`) — pin that to a matching 8.x AGP release too. Flutter's own
+  compatibility table is the source of truth for which pairs work together:
+  https://docs.flutter.dev/release/breaking-changes/flutter-gradle-plugin-apply
+
+**After editing `pubspec.yaml` or `AndroidManifest.xml`** — Gradle sometimes
+caches stale build files. If a build fails right after a dependency change,
+try:
+```
+flutter clean
+flutter pub get
+flutter run
+```
+
 ## Project structure
 
 ```
-lib/main.dart                      App entry point, navigation, notification + screen-time init
+lib/main.dart                      App entry point, onboarding + navigation + notification/screen-time init
 lib/theme.dart                     Colors, fonts, shared ThemeData
 lib/storage.dart                   SharedPreferences persistence helper
 lib/notifications.dart             Local notification scheduling service
 lib/screen_time.dart               Screen time tracking service
+lib/auth.dart                      Salted PIN hashing + storage
+lib/auth_gate.dart                 Lock-screen gate shown at launch / on resume
 lib/data/quotes.dart               Motivational quotes data
+lib/widgets/pin_dots.dart            PIN entry progress dots
+lib/widgets/pin_keypad.dart          Numeric keypad for PIN entry
+lib/screens/welcome_screen.dart      One-time "Get Started" onboarding screen
 lib/screens/todo_screen.dart         To-Do list (with due-date reminders)
 lib/screens/planner_screen.dart      Weekly study planner (with weekly reminders)
 lib/screens/timer_screen.dart        Pomodoro timer (with session-end alerts)
@@ -213,6 +386,14 @@ lib/screens/notes_screen.dart        Notes (list + full-screen editor)
 lib/screens/gpa_screen.dart          GPA calculator
 lib/screens/quotes_screen.dart       Motivational quotes
 lib/screens/screen_time_screen.dart  Screen time breakdown view
+lib/screens/lock_screen.dart         App-lock unlock screen
+lib/screens/pin_setup_screen.dart    Create/change PIN flow
+lib/screens/verify_pin_screen.dart   Re-enter current PIN before changes
+lib/screens/security_settings_screen.dart  App Lock settings screen
+lib/screens/translator_screen.dart   Translator
+lib/daily_quote_reminder.dart        Daily quote notification settings/scheduling
+native-widgets/android/...           Copy-in source for the Android home screen widget
+native-widgets/ios/...               Copy-in source for the iOS home screen widget
 ```
 
 ## Notes

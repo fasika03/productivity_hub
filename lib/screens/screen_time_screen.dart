@@ -1,9 +1,7 @@
 import 'dart:io' show Platform;
-import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:usage_stats/usage_stats.dart';
-import 'package:device_apps/device_apps.dart';
 import '../theme.dart';
 import '../screen_time.dart';
 
@@ -11,8 +9,8 @@ class _AppUsage {
   final String packageName;
   final String label;
   final int seconds;
-  final Uint8List? icon;
-  _AppUsage({required this.packageName, required this.label, required this.seconds, this.icon});
+  _AppUsage(
+      {required this.packageName, required this.label, required this.seconds});
 }
 
 class ScreenTimeScreen extends StatefulWidget {
@@ -32,9 +30,15 @@ class _ScreenTimeScreenState extends State<ScreenTimeScreen> {
   bool _devicePermissionGranted = false;
   bool _loadingDeviceUsage = false;
   List<_AppUsage> _deviceApps = [];
-  final Map<String, Application?> _appInfoCache = {};
 
-  static const _toolOrder = ['Tasks', 'Planner', 'Timer', 'Notes', 'GPA', 'Quotes'];
+  static const _toolOrder = [
+    'Tasks',
+    'Planner',
+    'Timer',
+    'Notes',
+    'GPA',
+    'Quotes'
+  ];
   static const _toolColors = {
     'Tasks': AppColors.sage,
     'Planner': AppColors.gold,
@@ -110,26 +114,16 @@ class _ScreenTimeScreenState extends State<ScreenTimeScreen> {
         totals[pkg] = (totals[pkg] ?? 0) + secs;
       }
 
-      final entries = totals.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
+      final entries = totals.entries.toList()
+        ..sort((a, b) => b.value.compareTo(a.value));
       final top = entries.take(30);
 
       final List<_AppUsage> result = [];
       for (final e in top) {
-        String label = e.key;
-        Uint8List? icon;
-        try {
-          if (!_appInfoCache.containsKey(e.key)) {
-            _appInfoCache[e.key] = await DeviceApps.getApp(e.key, true);
-          }
-          final app = _appInfoCache[e.key];
-          if (app != null) {
-            label = app.appName;
-            if (app is ApplicationWithIcon) icon = app.icon;
-          }
-        } catch (_) {
-          // fall back to the raw package name if lookup fails
-        }
-        result.add(_AppUsage(packageName: e.key, label: label, seconds: e.value, icon: icon));
+        result.add(_AppUsage(
+            packageName: e.key,
+            label: _friendlyLabel(e.key),
+            seconds: e.value));
       }
 
       if (mounted) setState(() => _deviceApps = result);
@@ -138,6 +132,16 @@ class _ScreenTimeScreenState extends State<ScreenTimeScreen> {
     } finally {
       if (mounted) setState(() => _loadingDeviceUsage = false);
     }
+  }
+
+  /// Turns a package name like "com.whatsapp" or "com.google.android.gm"
+  /// into a readable guess like "Whatsapp" or "Gm", since without a
+  /// package-info lookup we only have the raw package name to go on.
+  String _friendlyLabel(String packageName) {
+    final parts = packageName.split('.');
+    final last = parts.isNotEmpty ? parts.last : packageName;
+    if (last.isEmpty) return packageName;
+    return last[0].toUpperCase() + last.substring(1);
   }
 
   String _weekdayLabel(String dateKey) {
@@ -150,14 +154,18 @@ class _ScreenTimeScreenState extends State<ScreenTimeScreen> {
   @override
   Widget build(BuildContext context) {
     if (_loading) {
-      return const Center(child: CircularProgressIndicator(color: AppColors.gold));
+      return const Center(
+          child: CircularProgressIndicator(color: AppColors.gold));
     }
 
     final totalToday = (_todayEntry?['total'] as int?) ?? 0;
-    final screens = Map<String, dynamic>.from(_todayEntry?['screens'] as Map? ?? {});
+    final screens =
+        Map<String, dynamic>.from(_todayEntry?['screens'] as Map? ?? {});
     final maxWeek = _week.fold<int>(
       1,
-      (max, e) => ((e.value['total'] as int?) ?? 0) > max ? (e.value['total'] as int) : max,
+      (max, e) => ((e.value['total'] as int?) ?? 0) > max
+          ? (e.value['total'] as int)
+          : max,
     );
 
     final breakdown = _toolOrder
@@ -178,15 +186,23 @@ class _ScreenTimeScreenState extends State<ScreenTimeScreen> {
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(22),
-            decoration: BoxDecoration(color: AppColors.inkDark, borderRadius: BorderRadius.circular(6)),
+            decoration: BoxDecoration(
+                color: AppColors.inkDark,
+                borderRadius: BorderRadius.circular(6)),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text('TODAY IN PRODUCTIVITY HUB',
-                    style: TextStyle(fontSize: 10.5, letterSpacing: 1, color: Color(0x99F2ECDC))),
+                    style: TextStyle(
+                        fontSize: 10.5,
+                        letterSpacing: 1,
+                        color: Color(0x99F2ECDC))),
                 const SizedBox(height: 6),
                 Text(formatDuration(totalToday),
-                    style: const TextStyle(fontSize: 36, fontWeight: FontWeight.w700, color: AppColors.goldSoft)),
+                    style: const TextStyle(
+                        fontSize: 36,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.goldSoft)),
               ],
             ),
           ),
@@ -196,7 +212,8 @@ class _ScreenTimeScreenState extends State<ScreenTimeScreen> {
           if (breakdown.isEmpty)
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 10),
-              child: Text('No activity recorded yet today.', style: TextStyle(color: AppColors.textMuted, fontSize: 13)),
+              child: Text('No activity recorded yet today.',
+                  style: TextStyle(color: AppColors.textMuted, fontSize: 13)),
             )
           else
             ...breakdown.map((e) {
@@ -210,9 +227,15 @@ class _ScreenTimeScreenState extends State<ScreenTimeScreen> {
                     Row(
                       children: [
                         Expanded(
-                          child: Text(e.key, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, color: AppColors.textDark)),
+                          child: Text(e.key,
+                              style: const TextStyle(
+                                  fontSize: 13.5,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.textDark)),
                         ),
-                        Text(formatDuration(e.value), style: const TextStyle(fontSize: 12.5, color: AppColors.textMuted)),
+                        Text(formatDuration(e.value),
+                            style: const TextStyle(
+                                fontSize: 12.5, color: AppColors.textMuted)),
                       ],
                     ),
                     const SizedBox(height: 5),
@@ -251,7 +274,8 @@ class _ScreenTimeScreenState extends State<ScreenTimeScreen> {
                   children: [
                     Text(
                       total > 0 ? formatDuration(total) : '',
-                      style: const TextStyle(fontSize: 9.5, color: AppColors.textMuted),
+                      style: const TextStyle(
+                          fontSize: 9.5, color: AppColors.textMuted),
                     ),
                     const SizedBox(height: 4),
                     Container(
@@ -268,7 +292,8 @@ class _ScreenTimeScreenState extends State<ScreenTimeScreen> {
                       style: TextStyle(
                         fontSize: 11.5,
                         fontWeight: isToday ? FontWeight.w700 : FontWeight.w500,
-                        color: isToday ? AppColors.inkDark : AppColors.textMuted,
+                        color:
+                            isToday ? AppColors.inkDark : AppColors.textMuted,
                       ),
                     ),
                   ],
@@ -279,7 +304,10 @@ class _ScreenTimeScreenState extends State<ScreenTimeScreen> {
           const SizedBox(height: 8),
           const Text(
             'Time is tracked locally on this device only — nothing is sent anywhere.',
-            style: TextStyle(fontSize: 11.5, color: AppColors.textMuted, fontStyle: FontStyle.italic),
+            style: TextStyle(
+                fontSize: 11.5,
+                color: AppColors.textMuted,
+                fontStyle: FontStyle.italic),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 28),
@@ -295,7 +323,8 @@ class _ScreenTimeScreenState extends State<ScreenTimeScreen> {
           else if (!_checkedDevicePermission)
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 20),
-              child: Center(child: CircularProgressIndicator(color: AppColors.gold)),
+              child: Center(
+                  child: CircularProgressIndicator(color: AppColors.gold)),
             )
           else if (!_devicePermissionGranted)
             _buildPermissionCard()
@@ -314,7 +343,9 @@ class _ScreenTimeScreenState extends State<ScreenTimeScreen> {
         borderRadius: BorderRadius.circular(6),
         border: Border.all(color: AppColors.parchmentLine),
       ),
-      child: Text(text, style: const TextStyle(fontSize: 13, color: AppColors.textMuted, height: 1.5)),
+      child: Text(text,
+          style: const TextStyle(
+              fontSize: 13, color: AppColors.textMuted, height: 1.5)),
     );
   }
 
@@ -332,7 +363,8 @@ class _ScreenTimeScreenState extends State<ScreenTimeScreen> {
           const Text(
             "To show today's usage across all your apps, Android needs "
             "one-time permission via Settings → Usage Access.",
-            style: TextStyle(fontSize: 13, color: AppColors.textMuted, height: 1.5),
+            style: TextStyle(
+                fontSize: 13, color: AppColors.textMuted, height: 1.5),
           ),
           const SizedBox(height: 14),
           ElevatedButton(
@@ -340,9 +372,11 @@ class _ScreenTimeScreenState extends State<ScreenTimeScreen> {
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.inkDark,
               foregroundColor: AppColors.textLight,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(6)),
             ),
-            child: const Text('Grant access', style: TextStyle(fontWeight: FontWeight.w700)),
+            child: const Text('Grant access',
+                style: TextStyle(fontWeight: FontWeight.w700)),
           ),
         ],
       ),
@@ -370,7 +404,10 @@ class _ScreenTimeScreenState extends State<ScreenTimeScreen> {
       children: [
         Text(
           'Total: ${formatDuration(totalSeconds)}',
-          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.textDark),
+          style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textDark),
         ),
         const SizedBox(height: 10),
         ..._deviceApps.map((a) => Container(
@@ -385,14 +422,13 @@ class _ScreenTimeScreenState extends State<ScreenTimeScreen> {
                 children: [
                   ClipRRect(
                     borderRadius: BorderRadius.circular(8),
-                    child: a.icon != null
-                        ? Image.memory(a.icon!, width: 36, height: 36, fit: BoxFit.cover)
-                        : Container(
-                            width: 36,
-                            height: 36,
-                            color: AppColors.parchmentSoft,
-                            child: const Icon(Icons.apps, size: 18, color: AppColors.textMuted),
-                          ),
+                    child: Container(
+                      width: 36,
+                      height: 36,
+                      color: AppColors.parchmentSoft,
+                      child: const Icon(Icons.apps,
+                          size: 18, color: AppColors.textMuted),
+                    ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -403,7 +439,10 @@ class _ScreenTimeScreenState extends State<ScreenTimeScreen> {
                           a.label,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, color: AppColors.textDark),
+                          style: const TextStyle(
+                              fontSize: 13.5,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.textDark),
                         ),
                         const SizedBox(height: 5),
                         ClipRRect(
@@ -412,7 +451,8 @@ class _ScreenTimeScreenState extends State<ScreenTimeScreen> {
                             value: maxSeconds == 0 ? 0 : a.seconds / maxSeconds,
                             minHeight: 5,
                             backgroundColor: AppColors.parchmentSoft,
-                            valueColor: const AlwaysStoppedAnimation(AppColors.gold),
+                            valueColor:
+                                const AlwaysStoppedAnimation(AppColors.gold),
                           ),
                         ),
                       ],
@@ -421,7 +461,10 @@ class _ScreenTimeScreenState extends State<ScreenTimeScreen> {
                   const SizedBox(width: 10),
                   Text(
                     formatDuration(a.seconds),
-                    style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: AppColors.textMuted),
+                    style: const TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textMuted),
                   ),
                 ],
               ),

@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'theme.dart';
 import 'notifications.dart';
+import 'daily_quote_reminder.dart';
 import 'screen_time.dart';
+import 'storage.dart';
 import 'auth_gate.dart';
 import 'screens/todo_screen.dart';
 import 'screens/planner_screen.dart';
@@ -9,12 +11,15 @@ import 'screens/timer_screen.dart';
 import 'screens/notes_screen.dart';
 import 'screens/gpa_screen.dart';
 import 'screens/quotes_screen.dart';
+import 'screens/translator_screen.dart';
 import 'screens/screen_time_screen.dart';
 import 'screens/security_settings_screen.dart';
+import 'screens/welcome_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await NotificationService().init();
+  await DailyQuoteReminder().refreshIfEnabled();
   runApp(const ProductivityHubApp());
 }
 
@@ -27,8 +32,46 @@ class ProductivityHubApp extends StatelessWidget {
       title: 'Productivity Hub',
       debugShowCheckedModeBanner: false,
       theme: buildAppTheme(),
-      home: const AuthGate(child: RootNav()),
+      home: const AppRoot(),
     );
+  }
+}
+
+/// Decides what the person sees first: the one-time "Get Started" welcome
+/// screen, or (once that's done) the PIN lock gate wrapping the main app.
+class AppRoot extends StatefulWidget {
+  const AppRoot({super.key});
+
+  @override
+  State<AppRoot> createState() => _AppRootState();
+}
+
+class _AppRootState extends State<AppRoot> {
+  bool? _onboardingComplete;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkOnboarding();
+  }
+
+  Future<void> _checkOnboarding() async {
+    final data = await Storage.loadRaw('onboarding_complete');
+    if (!mounted) return;
+    setState(() => _onboardingComplete = data == true);
+  }
+
+  void _completeOnboarding() => setState(() => _onboardingComplete = true);
+
+  @override
+  Widget build(BuildContext context) {
+    if (_onboardingComplete == null) {
+      return const Scaffold(backgroundColor: AppColors.inkDark, body: SizedBox());
+    }
+    if (!_onboardingComplete!) {
+      return WelcomeScreen(onGetStarted: _completeOnboarding);
+    }
+    return const AuthGate(child: RootNav());
   }
 }
 
@@ -49,10 +92,11 @@ class _RootNavState extends State<RootNav> with WidgetsBindingObserver {
     'Notes',
     'GPA Calculator',
     'Quotes',
+    'Translator',
   ];
 
   // Matches the bottom-nav labels; used as the screen-time breakdown keys.
-  static const _screenNames = ['Tasks', 'Planner', 'Timer', 'Notes', 'GPA', 'Quotes'];
+  static const _screenNames = ['Tasks', 'Planner', 'Timer', 'Notes', 'GPA', 'Quotes', 'Translator'];
 
   static const _screens = [
     TodoScreen(),
@@ -61,6 +105,7 @@ class _RootNavState extends State<RootNav> with WidgetsBindingObserver {
     NotesScreen(),
     GpaScreen(),
     QuotesScreen(),
+    TranslatorScreen(),
   ];
 
   @override
@@ -146,6 +191,7 @@ class _RootNavState extends State<RootNav> with WidgetsBindingObserver {
           BottomNavigationBarItem(icon: Icon(Icons.description_outlined), label: 'Notes'),
           BottomNavigationBarItem(icon: Icon(Icons.school_outlined), label: 'GPA'),
           BottomNavigationBarItem(icon: Icon(Icons.auto_awesome_outlined), label: 'Quotes'),
+          BottomNavigationBarItem(icon: Icon(Icons.translate), label: 'Translate'),
         ],
       ),
     );

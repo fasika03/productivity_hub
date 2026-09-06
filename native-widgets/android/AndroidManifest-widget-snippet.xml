@@ -1,0 +1,13 @@
+<!--
+  Add this INSIDE the <application> tag (not at the top level like the
+  notification/usage-stats permissions) in:
+  android/app/src/main/AndroidManifest.xml
+-->
+<receiver android:name=".QuoteWidgetProvider" android:exported="true">
+    <intent-filter>
+        <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+    </intent-filter>
+    <meta-data
+        android:name="android.appwidget.provider"
+        android:resource="@xml/quote_widget_info" />
+</receiver>

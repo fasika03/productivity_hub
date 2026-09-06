@@ -1,7 +1,6 @@
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/data/latest_all.dart' as tzdata;
 import 'package:timezone/timezone.dart' as tz;
-import 'package:flutter_timezone/flutter_timezone.dart';
 
 /// Wraps flutter_local_notifications to schedule and cancel reminders for
 /// to-do due dates, weekly study-planner sessions, and Pomodoro timer alerts.
@@ -10,11 +9,15 @@ class NotificationService {
   factory NotificationService() => _instance;
   NotificationService._internal();
 
-  final FlutterLocalNotificationsPlugin _plugin = FlutterLocalNotificationsPlugin();
+  final FlutterLocalNotificationsPlugin _plugin =
+      FlutterLocalNotificationsPlugin();
   bool _initialized = false;
 
   /// Fixed id used for the single, reschedulable Pomodoro timer alert.
   static const int timerNotificationId = 999001;
+
+  /// Fixed id used for the single, reschedulable daily quote notification.
+  static const int dailyQuoteNotificationId = 555001;
 
   Future<void> init() async {
     if (_initialized) return;
@@ -28,22 +31,24 @@ class NotificationService {
       // the timezone package defaults to rather than crashing.
     }
 
-    const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const androidSettings =
+        AndroidInitializationSettings('@mipmap/ic_launcher');
     const iosSettings = DarwinInitializationSettings(
       requestAlertPermission: true,
       requestBadgePermission: true,
       requestSoundPermission: true,
     );
-    const initSettings = InitializationSettings(android: androidSettings, iOS: iosSettings);
+    const initSettings =
+        InitializationSettings(android: androidSettings, iOS: iosSettings);
     await _plugin.initialize(initSettings);
 
-    final androidImpl = _plugin
-        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+    final androidImpl = _plugin.resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin>();
     await androidImpl?.requestNotificationsPermission();
     await androidImpl?.requestExactAlarmsPermission();
 
-    final iosImpl = _plugin
-        .resolvePlatformSpecificImplementation<IOSFlutterLocalNotificationsPlugin>();
+    final iosImpl = _plugin.resolvePlatformSpecificImplementation<
+        IOSFlutterLocalNotificationsPlugin>();
     await iosImpl?.requestPermissions(alert: true, badge: true, sound: true);
 
     _initialized = true;
@@ -87,7 +92,8 @@ class NotificationService {
       scheduled,
       _details(channelId: channelId, channelName: channelName),
       androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-      uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
+      uiLocalNotificationDateInterpretation:
+          UILocalNotificationDateInterpretation.absoluteTime,
     );
   }
 
@@ -108,17 +114,58 @@ class NotificationService {
       title,
       body,
       scheduled,
-      _details(channelId: 'productivity_hub_planner', channelName: 'Study Planner'),
+      _details(
+          channelId: 'productivity_hub_planner', channelName: 'Study Planner'),
       androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-      uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
+      uiLocalNotificationDateInterpretation:
+          UILocalNotificationDateInterpretation.absoluteTime,
       matchDateTimeComponents: DateTimeComponents.dayOfWeekAndTime,
     );
   }
 
   tz.TZDateTime _nextInstanceOfWeekdayTime(int weekday, int hour, int minute) {
     final now = tz.TZDateTime.now(tz.local);
-    tz.TZDateTime scheduled = tz.TZDateTime(tz.local, now.year, now.month, now.day, hour, minute);
+    tz.TZDateTime scheduled =
+        tz.TZDateTime(tz.local, now.year, now.month, now.day, hour, minute);
     while (scheduled.weekday != weekday || scheduled.isBefore(now)) {
+      scheduled = scheduled.add(const Duration(days: 1));
+    }
+    return scheduled;
+  }
+
+  /// Schedules a notification that repeats every day at [hour]:[minute]
+  /// (e.g. the daily motivational quote). Since the same notification id is
+  /// reused, calling this again — with a freshly-picked quote as the body —
+  /// replaces whatever was previously scheduled rather than stacking up.
+  Future<void> scheduleDaily({
+    required int id,
+    required String title,
+    required String body,
+    required int hour,
+    required int minute,
+  }) async {
+    await init();
+    final scheduled = _nextInstanceOfTime(hour, minute);
+    await _plugin.zonedSchedule(
+      id,
+      title,
+      body,
+      scheduled,
+      _details(
+          channelId: 'productivity_hub_daily_quote',
+          channelName: 'Daily Quote'),
+      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+      uiLocalNotificationDateInterpretation:
+          UILocalNotificationDateInterpretation.absoluteTime,
+      matchDateTimeComponents: DateTimeComponents.time,
+    );
+  }
+
+  tz.TZDateTime _nextInstanceOfTime(int hour, int minute) {
+    final now = tz.TZDateTime.now(tz.local);
+    var scheduled =
+        tz.TZDateTime(tz.local, now.year, now.month, now.day, hour, minute);
+    if (scheduled.isBefore(now)) {
       scheduled = scheduled.add(const Duration(days: 1));
     }
     return scheduled;

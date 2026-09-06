@@ -1,0 +1,47 @@
+<!-- Copy this file to: android/app/src/main/res/layout/quote_widget.xml -->
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#1C2B24"
+    android:padding="16dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/widget_quote_text"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="\u201CLoading a quote\u2026\u201D"
+            android:textColor="#F2ECDC"
+            android:textSize="14sp"
+            android:textStyle="italic"
+            android:maxLines="4"
+            android:ellipsize="end" />
+
+        <TextView
+            android:id="@+id/widget_quote_author"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text=""
+            android:textColor="#C89B3C"
+            android:textSize="11sp"
+            android:textAllCaps="true" />
+
+        <ImageButton
+            android:id="@+id/widget_refresh"
+            android:layout_width="28dp"
+            android:layout_height="28dp"
+            android:layout_marginTop="10dp"
+            android:layout_gravity="end"
+            android:background="@android:color/transparent"
+            android:src="@android:drawable/ic_popup_sync"
+            android:contentDescription="Refresh quote" />
+
+    </LinearLayout>
+</FrameLayout>
