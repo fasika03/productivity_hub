@@ -149,7 +149,7 @@ Info.plist changes are required beyond the above.
 
 ## Screen time tracker
 
-Tap the hourglass icon in the top-right of any screen to see:
+Tap the ⋮ (More) icon in the top-right of any screen and choose **Screen Time** to see:
 - Total time spent in Productivity Hub today, and a breakdown by tool
   (Tasks, Planner, Timer, Notes, GPA, Quotes)
 - A simple 7-day bar chart of daily usage
@@ -192,7 +192,7 @@ stay local.
 
 ## App Lock (PIN)
 
-Tap the lock icon in the top-right of any screen to open **App Lock**, where
+Tap the ⋮ (More) icon in the top-right of any screen and choose **App Lock**, where
 you can set up a 4-digit PIN. Once one is set:
 - The app shows a lock screen requiring the PIN every time it's cold-started,
   and again any time it returns from the background (switching apps, locking
@@ -229,6 +229,23 @@ after that splash image, on first launch only.
 To see it again during testing, clear the app's local storage (uninstall and
 reinstall, or clear the app's storage from your device's app settings) — that
 resets the "have I onboarded" flag along with everything else.
+
+## Habit Tracker
+
+The Habits tab lets you track daily habits with streaks, similar to apps
+like Habitica or Streaks:
+- Add a habit by name (e.g. "Read for 20 min")
+- Tap any of the last 7 days' circles to mark it done or undone — not just
+  today, so you can back-fill a day you forgot to log
+- Each habit shows its current streak (consecutive days up to today, or up
+  to yesterday if today isn't marked yet — so the streak doesn't reset the
+  moment a new day starts) and its best-ever streak once you've beaten it
+- Optionally turn on a daily reminder per habit, at whatever time you pick,
+  using the same local notification system as the rest of the app
+
+Streak math lives in `lib/habits.dart` as small, easily testable pure
+functions (`currentStreak`, `bestStreak`) — no native setup needed for this
+feature beyond what reminders already require.
 
 ## Translator
 
@@ -365,6 +382,14 @@ flutter pub get
 flutter run
 ```
 
+## Navigation
+
+The bottom bar holds the six most-used tools: To-Do, Planner, Timer, Notes,
+GPA, and Habits. Quotes, Translator, App Lock, and Screen Time live one tap
+away behind the **⋮ (More)** icon in the top-right of every screen, since
+they're used less often and a bottom bar past six or seven items gets
+cramped fast on real phone widths.
+
 ## Project structure
 
 ```
@@ -391,6 +416,8 @@ lib/screens/pin_setup_screen.dart    Create/change PIN flow
 lib/screens/verify_pin_screen.dart   Re-enter current PIN before changes
 lib/screens/security_settings_screen.dart  App Lock settings screen
 lib/screens/translator_screen.dart   Translator
+lib/screens/habits_screen.dart       Habit tracker (streaks + reminders)
+lib/habits.dart                      Streak calculation helpers
 lib/daily_quote_reminder.dart        Daily quote notification settings/scheduling
 native-widgets/android/...           Copy-in source for the Android home screen widget
 native-widgets/ios/...               Copy-in source for the iOS home screen widget

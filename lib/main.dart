@@ -12,6 +12,7 @@ import 'screens/notes_screen.dart';
 import 'screens/gpa_screen.dart';
 import 'screens/quotes_screen.dart';
 import 'screens/translator_screen.dart';
+import 'screens/habits_screen.dart';
 import 'screens/screen_time_screen.dart';
 import 'screens/security_settings_screen.dart';
 import 'screens/welcome_screen.dart';
@@ -91,12 +92,11 @@ class _RootNavState extends State<RootNav> with WidgetsBindingObserver {
     'Pomodoro Timer',
     'Notes',
     'GPA Calculator',
-    'Quotes',
-    'Translator',
+    'Habit Tracker',
   ];
 
   // Matches the bottom-nav labels; used as the screen-time breakdown keys.
-  static const _screenNames = ['Tasks', 'Planner', 'Timer', 'Notes', 'GPA', 'Quotes', 'Translator'];
+  static const _screenNames = ['Tasks', 'Planner', 'Timer', 'Notes', 'GPA', 'Habits'];
 
   static const _screens = [
     TodoScreen(),
@@ -104,8 +104,7 @@ class _RootNavState extends State<RootNav> with WidgetsBindingObserver {
     TimerScreen(),
     NotesScreen(),
     GpaScreen(),
-    QuotesScreen(),
-    TranslatorScreen(),
+    HabitsScreen(),
   ];
 
   @override
@@ -136,41 +135,91 @@ class _RootNavState extends State<RootNav> with WidgetsBindingObserver {
     ScreenTimeTracker().enterScreen(_screenNames[i]);
   }
 
+  Future<void> _openMoreDestination(BuildContext context, String value) async {
+    late final String trackingName;
+    late final Widget screen;
+    switch (value) {
+      case 'quotes':
+        trackingName = 'Quotes';
+        screen = Scaffold(
+          appBar: AppBar(title: const Text('Quotes')),
+          backgroundColor: AppColors.parchment,
+          body: const QuotesScreen(),
+        );
+        break;
+      case 'translator':
+        trackingName = 'Translator';
+        screen = Scaffold(
+          appBar: AppBar(title: const Text('Translator')),
+          backgroundColor: AppColors.parchment,
+          body: const TranslatorScreen(),
+        );
+        break;
+      case 'app_lock':
+        trackingName = 'Security Settings';
+        screen = const SecuritySettingsScreen();
+        break;
+      case 'screen_time':
+      default:
+        trackingName = 'Screen Time';
+        screen = Scaffold(
+          appBar: AppBar(title: const Text('Screen Time')),
+          backgroundColor: AppColors.parchment,
+          body: const ScreenTimeScreen(),
+        );
+        break;
+    }
+    await ScreenTimeTracker().enterScreen(trackingName);
+    if (!context.mounted) return;
+    await Navigator.of(context).push(MaterialPageRoute(builder: (_) => screen));
+    ScreenTimeTracker().enterScreen(_screenNames[_index]);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: Text(_titles[_index]),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.lock_outline),
-            tooltip: 'App Lock',
-            onPressed: () async {
-              await ScreenTimeTracker().enterScreen('Security Settings');
-              if (!context.mounted) return;
-              await Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const SecuritySettingsScreen()),
-              );
-              ScreenTimeTracker().enterScreen(_screenNames[_index]);
-            },
-          ),
-          IconButton(
-            icon: const Icon(Icons.hourglass_bottom_outlined),
-            tooltip: 'Screen time',
-            onPressed: () async {
-              await ScreenTimeTracker().enterScreen('Screen Time');
-              if (!context.mounted) return;
-              await Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => Scaffold(
-                    appBar: AppBar(title: const Text('Screen Time')),
-                    backgroundColor: AppColors.parchment,
-                    body: const ScreenTimeScreen(),
-                  ),
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert),
+            tooltip: 'More',
+            color: AppColors.parchment,
+            onSelected: (value) => _openMoreDestination(context, value),
+            itemBuilder: (context) => const [
+              PopupMenuItem(
+                value: 'quotes',
+                child: ListTile(
+                  leading: Icon(Icons.auto_awesome_outlined, color: AppColors.inkDark),
+                  title: Text('Quotes'),
+                  contentPadding: EdgeInsets.zero,
                 ),
-              );
-              ScreenTimeTracker().enterScreen(_screenNames[_index]);
-            },
+              ),
+              PopupMenuItem(
+                value: 'translator',
+                child: ListTile(
+                  leading: Icon(Icons.translate, color: AppColors.inkDark),
+                  title: Text('Translator'),
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+              PopupMenuItem(
+                value: 'app_lock',
+                child: ListTile(
+                  leading: Icon(Icons.lock_outline, color: AppColors.inkDark),
+                  title: Text('App Lock'),
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+              PopupMenuItem(
+                value: 'screen_time',
+                child: ListTile(
+                  leading: Icon(Icons.hourglass_bottom_outlined, color: AppColors.inkDark),
+                  title: Text('Screen Time'),
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -190,8 +239,7 @@ class _RootNavState extends State<RootNav> with WidgetsBindingObserver {
           BottomNavigationBarItem(icon: Icon(Icons.timer_outlined), label: 'Timer'),
           BottomNavigationBarItem(icon: Icon(Icons.description_outlined), label: 'Notes'),
           BottomNavigationBarItem(icon: Icon(Icons.school_outlined), label: 'GPA'),
-          BottomNavigationBarItem(icon: Icon(Icons.auto_awesome_outlined), label: 'Quotes'),
-          BottomNavigationBarItem(icon: Icon(Icons.translate), label: 'Translate'),
+          BottomNavigationBarItem(icon: Icon(Icons.local_fire_department_outlined), label: 'Habits'),
         ],
       ),
     );
